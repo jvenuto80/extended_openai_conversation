@@ -9,6 +9,7 @@ from typing import Any, Literal
 from openai._exceptions import OpenAIError
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.completion_usage import CompletionUsage
 import yaml
 
 from homeassistant.components import conversation
@@ -36,6 +37,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
+    API_MODE_RESPONSES,
+    CONF_API_MODE,
     CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
@@ -44,9 +47,12 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_PROMPT,
+    CONF_REASONING_EFFORT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_USE_MAX_COMPLETION_TOKENS,
     CONF_USE_TOOLS,
+    DEFAULT_API_MODE,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
@@ -55,8 +61,10 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
+    DEFAULT_REASONING_EFFORT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
+    DEFAULT_USE_MAX_COMPLETION_TOKENS,
     DEFAULT_USE_TOOLS,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
@@ -69,6 +77,16 @@ from .exceptions import (
     TokenLengthExceededError,
 )
 from .helpers import get_function_executor
+from .responses_api import (
+    get_function_calls,
+    get_output_text,
+    get_token_kwargs,
+    is_incomplete_max_tokens,
+    normalize_reasoning_effort,
+    to_assistant_message,
+    to_responses_input,
+    to_responses_tools,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -361,23 +379,43 @@ class ExtendedOpenAIAgentEntity(
         if len(functions) == 0:
             tool_kwargs = {}
 
+        reasoning_effort = normalize_reasoning_effort(
+            self.options.get(CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT)
+        )
+        # Reasoning models reject temperature and top_p
+        sampling_kwargs = (
+            {} if reasoning_effort else {"top_p": top_p, "temperature": temperature}
+        )
+
+        if self.options.get(CONF_API_MODE, DEFAULT_API_MODE) == API_MODE_RESPONSES:
+            return await self.query_responses(
+                user_input,
+                messages,
+                exposed_entities,
+                n_requests,
+                functions,
+                function_call,
+                reasoning_effort,
+                sampling_kwargs,
+            )
+
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
-        # Determine which token parameter to use based on model
-        # Newer models (gpt-4o, gpt-5, o1, o3, etc.) require max_completion_tokens
-        model_lower = model.lower()
-        use_new_token_param = any(
-            model_lower.startswith(prefix) or f"-{prefix}" in model_lower
-            for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
+        token_kwargs = get_token_kwargs(
+            model,
+            max_tokens,
+            self.options.get(
+                CONF_USE_MAX_COMPLETION_TOKENS, DEFAULT_USE_MAX_COMPLETION_TOKENS
+            ),
         )
-        token_kwargs = {"max_completion_tokens": max_tokens} if use_new_token_param else {"max_tokens": max_tokens}
+        if reasoning_effort:
+            token_kwargs["reasoning_effort"] = reasoning_effort
 
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
-            top_p=top_p,
-            temperature=temperature,
             user=user_input.conversation_id,
+            **sampling_kwargs,
             **token_kwargs,
             **tool_kwargs,
         )
@@ -408,6 +446,86 @@ class ExtendedOpenAIAgentEntity(
             raise TokenLengthExceededError(response.usage.completion_tokens)
 
         return OpenAIQueryResponse(response=response, message=message)
+
+    async def query_responses(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        exposed_entities,
+        n_requests,
+        functions,
+        function_call,
+        reasoning_effort,
+        sampling_kwargs,
+    ) -> OpenAIQueryResponse:
+        """Process a sentence using the Responses API."""
+        model = self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        max_tokens = self.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
+        context_threshold = self.options.get(
+            CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
+        )
+
+        instructions, input_items = to_responses_input(messages)
+        request_kwargs = {}
+        if instructions:
+            request_kwargs["instructions"] = instructions
+        if functions:
+            request_kwargs["tools"] = to_responses_tools(functions)
+            request_kwargs["tool_choice"] = function_call
+        if reasoning_effort:
+            request_kwargs["reasoning"] = {"effort": reasoning_effort}
+
+        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+
+        response = await self.client.responses.create(
+            model=model,
+            input=input_items,
+            max_output_tokens=max_tokens,
+            store=False,
+            user=user_input.conversation_id,
+            **sampling_kwargs,
+            **request_kwargs,
+        )
+
+        _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
+
+        if response.usage and response.usage.total_tokens > context_threshold:
+            await self.truncate_message_history(messages, exposed_entities, user_input)
+
+        if is_incomplete_max_tokens(response):
+            raise TokenLengthExceededError(
+                response.usage.output_tokens if response.usage else max_tokens
+            )
+
+        text = get_output_text(response)
+        function_calls = get_function_calls(response)
+        if function_calls:
+            message = ChatCompletionMessage.model_validate(
+                to_assistant_message(text, function_calls)
+            )
+            return await self.execute_tool_calls(
+                user_input, messages, message, exposed_entities, n_requests + 1
+            )
+
+        message = ChatCompletionMessage(role="assistant", content=text)
+
+        # Expose the result as a ChatCompletion so events and history stay unchanged
+        usage = None
+        if response.usage:
+            usage = CompletionUsage(
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+        chat_response = ChatCompletion(
+            id=response.id,
+            object="chat.completion",
+            created=int(response.created_at),
+            model=response.model,
+            choices=[Choice(index=0, finish_reason="stop", message=message)],
+            usage=usage,
+        )
+        return OpenAIQueryResponse(response=chat_response, message=message)
 
     async def execute_function_call(
         self,

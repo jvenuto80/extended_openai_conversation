@@ -33,7 +33,9 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    API_MODES,
     API_PROVIDERS,
+    CONF_API_MODE,
     CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_ATTACH_USERNAME,
@@ -46,11 +48,14 @@ from .const import (
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
     CONF_PROMPT,
+    CONF_REASONING_EFFORT,
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_USE_MAX_COMPLETION_TOKENS,
     CONF_USE_TOOLS,
     CONTEXT_TRUNCATE_STRATEGIES,
+    DEFAULT_API_MODE,
     DEFAULT_API_PROVIDER,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
@@ -63,11 +68,14 @@ from .const import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
     DEFAULT_PROMPT,
+    DEFAULT_REASONING_EFFORT,
     DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
+    DEFAULT_USE_MAX_COMPLETION_TOKENS,
     DEFAULT_USE_TOOLS,
     DOMAIN,
+    REASONING_EFFORTS,
 )
 from .helpers import get_authenticated_client
 
@@ -112,6 +120,9 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
         CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
         CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+        CONF_API_MODE: DEFAULT_API_MODE,
+        CONF_REASONING_EFFORT: DEFAULT_REASONING_EFFORT,
+        CONF_USE_MAX_COMPLETION_TOKENS: DEFAULT_USE_MAX_COMPLETION_TOKENS,
     }
 )
 
@@ -333,4 +344,37 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional(
+                CONF_API_MODE,
+                description={"suggested_value": options.get(CONF_API_MODE)},
+                default=DEFAULT_API_MODE,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=mode["key"], label=mode["label"])
+                        for mode in API_MODES
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_REASONING_EFFORT,
+                description={"suggested_value": options.get(CONF_REASONING_EFFORT)},
+                default=DEFAULT_REASONING_EFFORT,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=effort["key"], label=effort["label"])
+                        for effort in REASONING_EFFORTS
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_USE_MAX_COMPLETION_TOKENS,
+                description={
+                    "suggested_value": options.get(CONF_USE_MAX_COMPLETION_TOKENS)
+                },
+                default=DEFAULT_USE_MAX_COMPLETION_TOKENS,
+            ): BooleanSelector(),
         }

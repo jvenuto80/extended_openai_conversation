@@ -102,6 +102,26 @@ CONTEXT_TRUNCATE_STRATEGIES = [{"key": "clear", "label": "Clear All Messages"}]
 CONF_CONTEXT_TRUNCATE_STRATEGY = "context_truncate_strategy"
 DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 
+CONF_API_MODE = "api_mode"
+API_MODE_CHAT_COMPLETIONS = "chat_completions"
+API_MODE_RESPONSES = "responses"
+API_MODES = [
+    {"key": API_MODE_CHAT_COMPLETIONS, "label": "Chat Completions"},
+    {"key": API_MODE_RESPONSES, "label": "Responses"},
+]
+DEFAULT_API_MODE = API_MODE_CHAT_COMPLETIONS
+CONF_REASONING_EFFORT = "reasoning_effort"
+REASONING_EFFORTS = [
+    {"key": "default", "label": "Default (not sent)"},
+    {"key": "low", "label": "Low"},
+    {"key": "medium", "label": "Medium"},
+    {"key": "high", "label": "High"},
+    {"key": "xhigh", "label": "Extra High"},
+]
+DEFAULT_REASONING_EFFORT = "default"
+CONF_USE_MAX_COMPLETION_TOKENS = "use_max_completion_tokens"
+DEFAULT_USE_MAX_COMPLETION_TOKENS = False
+
 SERVICE_QUERY_IMAGE = "query_image"
 
 CONF_PAYLOAD_TEMPLATE = "payload_template"

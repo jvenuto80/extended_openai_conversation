@@ -64,6 +64,14 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 - `Functions`: A list of mappings of function spec to function.
   - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
   - `function`: function that will be called.
+- `API Mode`: `Chat Completions` (default) or `Responses`. The Responses mode calls [`/v1/responses`](https://platform.openai.com/docs/api-reference/responses) (with `store=false`) and supports function calling, which some reasoning models only allow there. Conversation history and functions are the same in both modes.
+- `Reasoning Effort`: `Default (not sent)`, `low`, `medium`, `high` or `xhigh`. When set, `temperature` and `top_p` are not sent because reasoning models reject them.
+- `Always use max_completion_tokens`: send `max_completion_tokens` instead of `max_tokens` on Chat Completions regardless of the model name. Models starting with `gpt-4o`, `gpt-5`, `gpt-6`, `o1`, `o3`, `o4` use it automatically, but Azure deployment names are arbitrary. (Responses mode always uses `max_output_tokens`.)
+
+#### Example: Azure OpenAI reasoning model (gpt-6.x)
+Azure reasoning deployments such as `gpt-6.1` reject function tools on Chat Completions, so use Responses mode:
+- Config entry: `API Provider`: `Azure OpenAI`, `Base Url`: `https://<resource>.openai.azure.com`, `Api Version`: `2025-04-01-preview`
+- Options: `Completion Model`: your deployment name (e.g. `gpt-6.1-sol`), `API Mode`: `Responses`, `Reasoning Effort`: `low`, `Maximum tokens to return in response`: `2000` or more (reasoning tokens count toward this limit)
 
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |

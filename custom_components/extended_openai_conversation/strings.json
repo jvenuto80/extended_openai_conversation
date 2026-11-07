@@ -33,10 +33,16 @@
           "attach_username": "Attach Username to Message",
           "use_tools": "Use Tools",
           "context_threshold": "Context Threshold",
-          "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+          "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+          "api_mode": "API mode",
+          "reasoning_effort": "Reasoning effort",
+          "use_max_completion_tokens": "Always use max_completion_tokens"
         },
         "data_description": {
-          "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used."
+          "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used.",
+          "api_mode": "Chat Completions (default) or Responses API. Use Responses for reasoning models that do not support function tools on Chat Completions (e.g. Azure gpt-6.x).",
+          "reasoning_effort": "Reasoning effort for reasoning models. When set, temperature and top_p are not sent.",
+          "use_max_completion_tokens": "Send max_completion_tokens instead of max_tokens regardless of the model name (useful for Azure deployment names)."
         }
       }
     }
