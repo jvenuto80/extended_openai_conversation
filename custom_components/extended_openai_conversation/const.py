@@ -113,10 +113,12 @@ DEFAULT_API_MODE = API_MODE_CHAT_COMPLETIONS
 CONF_REASONING_EFFORT = "reasoning_effort"
 REASONING_EFFORTS = [
     {"key": "default", "label": "Default (not sent)"},
+    {"key": "none", "label": "None"},
     {"key": "low", "label": "Low"},
     {"key": "medium", "label": "Medium"},
     {"key": "high", "label": "High"},
     {"key": "xhigh", "label": "Extra High"},
+    {"key": "max", "label": "Max"},
 ]
 DEFAULT_REASONING_EFFORT = "default"
 CONF_USE_MAX_COMPLETION_TOKENS = "use_max_completion_tokens"
